@@ -11,29 +11,36 @@ import (
 	"imuslab.com/zoraxy/mod/dynamicproxy/dpcore"
 )
 
-// StartProxy create and start a HTTP proxy using dpcore
-// Example of webProxyEndpoint: https://example.com:443 or http://192.168.1.100:8080
-func (u *Upstream) StartProxy() error {
+// buildUpstreamTargetURL resolves a configured OriginIpOrDomain (which may or may
+// not already carry its own scheme) plus the RequireTLS setting into the final
+// upstream URL, without ever double-prefixing a scheme the user already typed.
+func buildUpstreamTargetURL(rawDomain string, requireTLS bool) (*url.URL, error) {
 	//Filter the tailing slash if any
-	domain := u.OriginIpOrDomain
+	domain := rawDomain
 	if len(domain) == 0 {
-		return errors.New("invalid endpoint config")
+		return nil, errors.New("invalid endpoint config")
 	}
 	if domain[len(domain)-1:] == "/" {
 		domain = domain[:len(domain)-1]
 	}
 
-	if !strings.HasPrefix("http://", domain) && !strings.HasPrefix("https://", domain) {
+	if !strings.HasPrefix(domain, "http://") && !strings.HasPrefix(domain, "https://") {
 		//TLS is not hardcoded in proxy target domain
-		if u.RequireTLS {
+		if requireTLS {
 			domain = "https://" + domain
 		} else {
 			domain = "http://" + domain
 		}
 	}
 
+	return url.Parse(domain)
+}
+
+// StartProxy create and start a HTTP proxy using dpcore
+// Example of webProxyEndpoint: https://example.com:443 or http://192.168.1.100:8080
+func (u *Upstream) StartProxy() error {
 	//Create a new proxy agent for this upstream
-	path, err := url.Parse(domain)
+	path, err := buildUpstreamTargetURL(u.OriginIpOrDomain, u.RequireTLS)
 	if err != nil {
 		return err
 	}
