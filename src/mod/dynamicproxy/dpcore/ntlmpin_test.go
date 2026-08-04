@@ -21,8 +21,8 @@ func newTestReverseProxy(t *testing.T) *ReverseProxy {
 func TestGetPinnedTransportReusesSameClientConnection(t *testing.T) {
 	p := newTestReverseProxy(t)
 
-	first := p.getPinnedTransport("192.0.2.10:51000")
-	second := p.getPinnedTransport("192.0.2.10:51000")
+	first := p.getPinnedTransport("192.0.2.10:51000", "")
+	second := p.getPinnedTransport("192.0.2.10:51000", "")
 
 	if first != second {
 		t.Fatalf("expected the same pinned transport for repeated calls with the same RemoteAddr")
@@ -34,8 +34,8 @@ func TestGetPinnedTransportReusesSameClientConnection(t *testing.T) {
 func TestGetPinnedTransportIsolatesDifferentClientConnections(t *testing.T) {
 	p := newTestReverseProxy(t)
 
-	a := p.getPinnedTransport("192.0.2.10:51000")
-	b := p.getPinnedTransport("192.0.2.20:52000")
+	a := p.getPinnedTransport("192.0.2.10:51000", "")
+	b := p.getPinnedTransport("192.0.2.20:52000", "")
 
 	if a == b {
 		t.Fatalf("expected different clients to get isolated pinned transports")
@@ -47,7 +47,7 @@ func TestGetPinnedTransportIsolatesDifferentClientConnections(t *testing.T) {
 func TestGetPinnedTransportConfig(t *testing.T) {
 	p := newTestReverseProxy(t)
 
-	rt := p.getPinnedTransport("192.0.2.30:53000")
+	rt := p.getPinnedTransport("192.0.2.30:53000", "")
 	tr, ok := rt.(*http.Transport)
 	if !ok {
 		t.Fatalf("expected *http.Transport, got %T", rt)
@@ -68,7 +68,7 @@ func TestGetPinnedTransportConfig(t *testing.T) {
 func TestSweepNtlmPinsOnceEvictsIdlePins(t *testing.T) {
 	p := newTestReverseProxy(t)
 
-	rt := p.getPinnedTransport("192.0.2.40:54000")
+	rt := p.getPinnedTransport("192.0.2.40:54000", "")
 
 	ntlmPinsMutex.Lock()
 	pin, ok := ntlmPins["192.0.2.40:54000"]
@@ -91,8 +91,36 @@ func TestSweepNtlmPinsOnceEvictsIdlePins(t *testing.T) {
 
 	// A fresh call after eviction must mint a new transport rather than reuse the
 	// (now closed) evicted one.
-	rt2 := p.getPinnedTransport("192.0.2.40:54000")
+	rt2 := p.getPinnedTransport("192.0.2.40:54000", "")
 	if rt == rt2 {
 		t.Fatalf("expected a new transport to be created after eviction")
+	}
+}
+
+// Regression test for the bug reported against a real Exchange deployment: an
+// HTTPS upstream addressed by IP (e.g. https://192.168.120.70) makes dpcore set
+// p.useRequestHostAsSNI so the SNI is derived from the request's Host instead of
+// the IP (Go drops IP literals from the ClientHello, see NewDynamicProxyCore).
+// The pinned transport must pick that up too, or the backend TLS handshake
+// presents no SNI, the backend falls back to a default cert, and verification
+// against the client's expected hostname fails -- exactly the 521 the report
+// describes, happening before NTLM itself ever comes into play.
+func TestGetPinnedTransportUsesRequestHostAsSNIForIPUpstream(t *testing.T) {
+	target, err := url.Parse("https://192.168.120.70")
+	if err != nil {
+		t.Fatalf("failed to parse target: %v", err)
+	}
+	p := NewDynamicProxyCore(target, "", &DpcoreOptions{})
+
+	rt := p.getPinnedTransport("198.51.100.5:60000", "remote.sds-systemtechnik.de")
+	tr, ok := rt.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport, got %T", rt)
+	}
+	if tr.TLSClientConfig == nil {
+		t.Fatalf("expected a TLSClientConfig to be set")
+	}
+	if got, want := tr.TLSClientConfig.ServerName, "remote.sds-systemtechnik.de"; got != want {
+		t.Errorf("ServerName = %q, want %q", got, want)
 	}
 }

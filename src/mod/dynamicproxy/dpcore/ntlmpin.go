@@ -2,6 +2,7 @@ package dpcore
 
 import (
 	"crypto/tls"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -29,7 +30,13 @@ var (
 	ntlmSweepOnce sync.Once
 )
 
-func (p *ReverseProxy) getPinnedTransport(remoteAddr string) http.RoundTripper {
+// getPinnedTransport returns the transport pinned to remoteAddr, creating it on
+// first use. requestHost is only consulted at creation time: for IP-addressed
+// HTTPS upstreams (p.useRequestHostAsSNI, see NewDynamicProxyCore) the shared
+// base transport carries no SNI, so it's derived here from the first request's
+// Host once and baked into the pin -- not re-derived per request, since that
+// would require cloning (and thus a fresh, unpooled transport) on every call.
+func (p *ReverseProxy) getPinnedTransport(remoteAddr, requestHost string) http.RoundTripper {
 	ntlmSweepOnce.Do(startNtlmPinSweeper)
 
 	ntlmPinsMutex.Lock()
@@ -47,6 +54,23 @@ func (p *ReverseProxy) getPinnedTransport(remoteAddr string) http.RoundTripper {
 		trc.IdleConnTimeout = ntlmPinIdleTimeout
 		trc.ForceAttemptHTTP2 = false
 		trc.TLSNextProto = make(map[string]func(authority string, c *tls.Conn) http.RoundTripper)
+
+		if p.useRequestHostAsSNI {
+			serverName := requestHost
+			if h, _, err := net.SplitHostPort(serverName); err == nil {
+				serverName = h
+			}
+			// Skip if empty or itself an IP (Go would omit an IP from the ClientHello).
+			if serverName != "" && net.ParseIP(serverName) == nil {
+				cfg := &tls.Config{}
+				if trc.TLSClientConfig != nil {
+					cfg = trc.TLSClientConfig.Clone()
+				}
+				cfg.ServerName = serverName
+				trc.TLSClientConfig = cfg
+			}
+		}
+
 		pin = &ntlmPinnedConn{transport: trc}
 		ntlmPins[remoteAddr] = pin
 	}

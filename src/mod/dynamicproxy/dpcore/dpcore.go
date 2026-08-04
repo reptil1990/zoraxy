@@ -288,9 +288,6 @@ func newBaseTransport(opts *DpcoreOptions) *http.Transport {
 
 func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request, rrr *ResponseRewriteRuleSet) (int, error) {
 	transport := p.Transport
-	if rrr.EnableNTLM {
-		transport = p.getPinnedTransport(req.RemoteAddr)
-	}
 
 	// Bind cancel context to request
 	outreq := req.Clone(req.Context())
@@ -357,7 +354,14 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request, rrr 
 	needClone := false
 	var trc *http.Transport
 
-	if tr, ok := transport.(*http.Transport); ok && !rrr.EnableNTLM {
+	if rrr.EnableNTLM {
+		// The pinned transport is built once per client connection (see
+		// getPinnedTransport) with HTTP/1.1 and the correct SNI already baked in,
+		// so it must not go through the per-request clone-on-top below -- that
+		// would hand back a fresh, unpooled transport every request and defeat
+		// the whole point of pinning.
+		transport = p.getPinnedTransport(req.RemoteAddr, outreq.Host)
+	} else if tr, ok := transport.(*http.Transport); ok {
 		if rrr.ForceHTTP11 {
 			trc = tr.Clone()
 			needClone = true
