@@ -54,6 +54,28 @@ func (router *Router) configureHTTP2(srv *http.Server) error {
 	return http2.ConfigureServer(srv, h2s)
 }
 
+// getConfigForClient returns HTTP/2-suppressing per-connection TLS overrides for
+// hosts with EnableNTLM. NTLM's handshake needs the client<->backend TCP connection
+// pinned for its whole duration; browsers refuse to run NTLM over an HTTP/2
+// connection at all, so any host relying on NTLM must be served HTTP/1.1 on the
+// frontend too. base is the listener's shared TLS config -- captured after
+// ServeTLS has already added "h2" to its NextProtos -- so returning nil here for
+// every other host leaves that default untouched.
+func (router *Router) getConfigForClient(base *tls.Config) func(*tls.ClientHelloInfo) (*tls.Config, error) {
+	return func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+		if chi.ServerName == "" {
+			return nil, nil
+		}
+		ept := router.GetProxyEndpointFromHostname(chi.ServerName)
+		if ept == nil || !ept.EnableNTLM {
+			return nil, nil
+		}
+		cfg := base.Clone()
+		cfg.NextProtos = []string{"http/1.1"}
+		return cfg, nil
+	}
+}
+
 func NewDynamicProxy(option RouterOption) (*Router, error) {
 	proxyMap := sync.Map{}
 	thisRouter := Router{
@@ -132,6 +154,7 @@ func (router *Router) StartProxyService() error {
 		GetCertificate: router.Option.TlsManager.GetCert,
 		MinVersion:     uint16(minVersion),
 	}
+	config.GetConfigForClient = router.getConfigForClient(config)
 
 	//Start rate limitor
 	err := router.startRateLimterCounterResetTicker()

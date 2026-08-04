@@ -407,7 +407,7 @@
                             <div class="ui checkbox" style="margin-top: 0.4em;">
                                 <input type="checkbox" class="EnableNTLM">
                                 <label>Enable NTLM / Kerberos Authentication<br>
-                                    <small>Pin each client connection to a dedicated upstream connection so NTLM/Kerberos handshakes complete. Requires HTTP/1.1 on both the client and upstream side.</small></label>
+                                    <small>Pin each client connection to a dedicated upstream connection so NTLM/Kerberos handshakes complete, and automatically disable HTTP/2 for this host so the browser negotiates HTTP/1.1 too.</small></label>
                             </div>
 
                         </div>
