@@ -57,14 +57,18 @@ func (p *ReverseProxy) getPinnedTransport(remoteAddr string) http.RoundTripper {
 func startNtlmPinSweeper() {
 	go func() {
 		for range time.Tick(ntlmPinSweepPeriod) {
-			ntlmPinsMutex.Lock()
-			for addr, pin := range ntlmPins {
-				if time.Since(pin.lastUsed) > ntlmPinIdleTimeout {
-					pin.transport.CloseIdleConnections()
-					delete(ntlmPins, addr)
-				}
-			}
-			ntlmPinsMutex.Unlock()
+			sweepNtlmPinsOnce()
 		}
 	}()
+}
+
+func sweepNtlmPinsOnce() {
+	ntlmPinsMutex.Lock()
+	defer ntlmPinsMutex.Unlock()
+	for addr, pin := range ntlmPins {
+		if time.Since(pin.lastUsed) > ntlmPinIdleTimeout {
+			pin.transport.CloseIdleConnections()
+			delete(ntlmPins, addr)
+		}
+	}
 }
