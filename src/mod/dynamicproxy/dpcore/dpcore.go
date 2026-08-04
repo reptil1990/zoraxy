@@ -85,6 +85,7 @@ type ResponseRewriteRuleSet struct {
 	DisableChunkedTransferEncoding bool   //Disable chunked transfer encoding
 	ForceHTTP11                    bool   //Force use HTTP/1.1 for upstream connection
 	AllowConnect                   bool   //Allow HTTP CONNECT tunneling; when true the target is validated against ProxyDomain
+	EnableNTLM                     bool   //Pin client<->backend TCP connection for NTLM/Kerberos auth handshakes
 
 	/* System Information Payload */
 	DevelopmentMode bool   //Inject dev mode information to requests
@@ -287,6 +288,9 @@ func newBaseTransport(opts *DpcoreOptions) *http.Transport {
 
 func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request, rrr *ResponseRewriteRuleSet) (int, error) {
 	transport := p.Transport
+	if rrr.EnableNTLM {
+		transport = p.getPinnedTransport(req.RemoteAddr)
+	}
 
 	// Bind cancel context to request
 	outreq := req.Clone(req.Context())
@@ -353,7 +357,7 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request, rrr 
 	needClone := false
 	var trc *http.Transport
 
-	if tr, ok := transport.(*http.Transport); ok {
+	if tr, ok := transport.(*http.Transport); ok && !rrr.EnableNTLM {
 		if rrr.ForceHTTP11 {
 			trc = tr.Clone()
 			needClone = true

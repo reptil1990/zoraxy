@@ -403,7 +403,13 @@
                                 <label>Force HTTP/1.1<br>
                                     <small>Force the proxy to use HTTP/1.1 for upstream connections, disabling HTTP/2</small></label>
                             </div>
-                            
+                            <br>
+                            <div class="ui checkbox" style="margin-top: 0.4em;">
+                                <input type="checkbox" class="EnableNTLM">
+                                <label>Enable NTLM / Kerberos Authentication<br>
+                                    <small>Pin each client connection to a dedicated upstream connection so NTLM/Kerberos handshakes complete. Requires HTTP/1.1 on both the client and upstream side.</small></label>
+                            </div>
+
                         </div>
                     </div>
                     <!-- WebSocket-->
@@ -1163,6 +1169,7 @@
         let enableConnectSupport = $(editor).find(".EnableConnectSupport")[0].checked;
         let disableChunkedTransferEncoding = $(editor).find(".DisableChunkedTransferEncoding")[0].checked;
         let forceHTTP11 = $(editor).find(".ForceHTTP11")[0].checked;
+        let enableNTLM = $(editor).find(".EnableNTLM")[0].checked;
         let disableWebSocket = !$(editor).find(".EnableWebSocket")[0].checked;
         let websocketTimeout = parseInt($(editor).find(".WebsocketTimeout").val()) || 0;
         if (websocketTimeout < 0) websocketTimeout = 0;
@@ -1203,6 +1210,7 @@
                 "rate" :requireRateLimit,
                 "dChunkedEnc": disableChunkedTransferEncoding,
                 "forceHTTP11": forceHTTP11,
+                "enableNTLM": enableNTLM,
                 "disableWebSocket": disableWebSocket,
                 "websocketTimeout": websocketTimeout,
                 "enableTimeoutRefreshOnActivity": enableTimeoutRefreshOnActivity,
@@ -1859,6 +1867,12 @@
         editor.find(".ForceHTTP11").off("change");
         editor.find(".ForceHTTP11").prop("checked", subd.ForceHTTP11);
         editor.find(".ForceHTTP11").on("change", function() {
+            saveProxyInlineEdit(uuid);
+        });
+
+        editor.find(".EnableNTLM").off("change");
+        editor.find(".EnableNTLM").prop("checked", subd.EnableNTLM);
+        editor.find(".EnableNTLM").on("change", function() {
             saveProxyInlineEdit(uuid);
         });
 

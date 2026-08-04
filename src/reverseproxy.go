@@ -764,6 +764,9 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 	// Force HTTP/1.1
 	forceHTTP11, _ := utils.PostBool(r, "forceHTTP11")
 
+	// NTLM connection pinning
+	enableNTLM, _ := utils.PostBool(r, "enableNTLM")
+
 	// WebSocket options
 	disableWebSocket, _ := utils.PostBool(r, "disableWebSocket")
 	websocketTimeoutStr, _ := utils.PostPara(r, "websocketTimeout")
@@ -840,6 +843,7 @@ func ReverseProxyHandleEditEndpoint(w http.ResponseWriter, r *http.Request) {
 	newProxyEndpoint.DisableAutoFallback = disableAutoFallback
 	newProxyEndpoint.DisableChunkedTransferEncoding = disableChunkedEncoding
 	newProxyEndpoint.ForceHTTP11 = forceHTTP11
+	newProxyEndpoint.EnableNTLM = enableNTLM
 	newProxyEndpoint.DisableWebSocket = disableWebSocket
 	newProxyEndpoint.WebsocketTimeout = websocketTimeout
 	newProxyEndpoint.EnableTimeoutRefreshOnActivity = enableTimeoutRefreshOnActivity

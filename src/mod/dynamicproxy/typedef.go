@@ -289,6 +289,9 @@ type ProxyEndpoint struct {
 	DisableChunkedTransferEncoding bool //Disable chunked transfer encoding for this endpoint
 	ForceHTTP11                    bool //Force use HTTP/1.1 for upstream connection
 
+	//NTLM / Kerberos support
+	EnableNTLM bool //Pin client<->backend TCP connection for NTLM/Kerberos auth handshakes
+
 	//Access Control
 	AccessFilterUUID string //Access filter ID
 
